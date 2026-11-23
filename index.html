@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ระบบสั่งของบาร์ - สาขา สนามกีฬาแห่งชาติ</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Prompt', sans-serif; background-color: #f8fafc; -webkit-tap-highlight-color: transparent; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    
+    /* ตั้งค่าหน้ากระดาษสำหรับสั่งพิมพ์ A4 */
+    @media print {
+      @page { size: A4 portrait; margin: 12mm; }
+      body { background: white !important; color: black !important; font-size: 12px; }
+      .no-print { display: none !important; }
+      .print-only { display: block !important; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { border: 1px solid #333 !important; padding: 6px 8px !important; }
+      th { background-color: #f1f5f9 !important; -webkit-print-color-adjust: exact; }
+    }
+    .print-only { display: none; }
+  </style>
+</head>
+<body class="text-slate-800 pb-28">
+
+  <!-- Header (ซ่อนตอนพิมพ์) -->
+  <header class="bg-emerald-700 text-white sticky top-0 z-30 shadow-md no-print">
+    <div class="max-w-4xl mx-auto px-4 py-3 flex justify-between items-center">
+      <div>
+        <h1 class="text-lg font-bold leading-tight">ระบบบันทึกการสั่งของบาร์</h1>
+        <p class="text-xs text-emerald-100">สาขา สนามกีฬาแห่งชาติ</p>
+      </div>
+      <div class="flex bg-emerald-800/70 p-1 rounded-xl text-sm">
+        <button onclick="switchTab('order')" id="tab-order" class="px-3 py-1.5 rounded-lg font-medium bg-white text-emerald-800 shadow-sm transition">สั่งของ</button>
+        <button onclick="switchTab('history')" id="tab-history" class="px-3 py-1.5 rounded-lg font-medium text-emerald-100 hover:text-white transition">ประวัติย้อนหลัง</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== หน้า 1: สั่งของ ==================== -->
+  <main id="view-order" class="max-w-4xl mx-auto px-4 pt-4 no-print">
+    
+    <!-- ข้อมูลใบสั่งซื้อ -->
+    <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/80 mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div>
+        <label class="block text-xs font-medium text-slate-500 mb-1">วันที่สั่งของ</label>
+        <input type="date" id="order-date" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-500 mb-1">ผู้ทำรายการ</label>
+        <input type="text" id="order-by" placeholder="ระบุชื่อพนักงาน" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-500 mb-1">หมายเหตุ (ถ้ามี)</label>
+        <input type="text" id="order-note" placeholder="เช่น รอบส่งวันศุกร์" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500">
+      </div>
+    </div>
+
+    <!-- ช่องค้นหา & ตัวกรอง Supplier -->
+    <div class="sticky top-[60px] z-20 bg-[#f8fafc] pt-1 pb-3">
+      <div class="relative mb-2.5">
+        <input type="text" id="search-input" oninput="renderProducts()" placeholder="ค้นหาชื่อวัตถุดิบ หรือ รหัสสินค้า..." class="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm shadow-sm focus:outline-none focus:border-emerald-500">
+        <svg class="w-4 h-4 text-slate-400 absolute left-3.5 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+        <button onclick="clearSearch()" id="clear-search-btn" class="hidden absolute right-3 top-2.5 text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-md">ล้าง</button>
+      </div>
+
+      <!-- แถบเลือก Supplier -->
+      <div id="supplier-tabs" class="flex gap-2 overflow-x-auto no-scrollbar pb-1"></div>
+    </div>
+
+    <!-- รายการสินค้า -->
+    <div id="product-list" class="space-y-2.5"></div>
+  </main>
+
+  <!-- แถบสรุปยอดด้านล่าง (Sticky Bottom Bar) -->
+  <div id="bottom-bar" class="fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 shadow-[0_-4px_15px_rgba(0,0,0,0.06)] z-30 no-print">
+    <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+      <div onclick="openCartModal()" class="cursor-pointer flex-1">
+        <div class="flex items-center gap-2">
+          <span class="bg-emerald-100 text-emerald-800 text-xs font-bold px-2.5 py-0.5 rounded-full" id="cart-count">0 รายการ</span>
+          <span class="text-xs text-slate-400 underline">แตะเพื่อดูสรุป</span>
+        </div>
+        <div class="text-lg font-bold text-slate-800 mt-0.5">฿<span id="cart-total">0.00</span></div>
+      </div>
+      <button onclick="openCartModal()" id="review-btn" disabled class="bg-emerald-600 disabled:bg-slate-300 text-white font-semibold px-6 py-3 rounded-xl shadow-sm transition active:scale-95">
+        ตรวจสอบ & บันทึก
+      </button>
+    </div>
+  </div>
+
+  <!-- Modal ตรวจสอบรายการก่อนบันทึก -->
+  <div id="cart-modal" class="fixed inset-0 bg-black/50 z-40 hidden flex items-end sm:items-center justify-center p-0 sm:p-4 no-print">
+    <div class="bg-white w-full max-w-2xl rounded-t-3xl sm:rounded-2xl max-h-[88vh] flex flex-col overflow-hidden shadow-2xl">
+      <div class="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+        <div>
+          <h2 class="font-bold text-base text-slate-800">สรุปรายการสั่งซื้อ</h2>
+          <p class="text-xs text-slate-500">ตรวจสอบจำนวนและยอดเงินก่อนบันทึกเข้าระบบ</p>
+        </div>
+        <button onclick="closeCartModal()" class="p-2 text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+      </div>
+      
+      <div id="cart-items-container" class="p-4 overflow-y-auto space-y-4 flex-1"></div>
+
+      <div class="p-4 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row justify-between items-center gap-3">
+        <div class="w-full sm:w-auto flex justify-between sm:block">
+          <span class="text-xs text-slate-500">ยอดรวมสุทธิทั้งหมด</span>
+          <div class="text-xl font-bold text-emerald-700">฿<span id="modal-total">0.00</span></div>
+        </div>
+        <div class="flex gap-2 w-full sm:w-auto">
+          <button onclick="clearCart()" class="px-4 py-2.5 border border-rose-200 text-rose-600 rounded-xl text-sm font-medium hover:bg-rose-50">ล้างตะกร้า</button>
+          <button onclick="submitOrder()" id="submit-btn" class="flex-1 sm:flex-none bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-6 py-2.5 rounded-xl shadow-sm transition">
+            บันทึกข้อมูลลง Sheet
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== หน้า 2: ประวัติย้อนหลัง & พิมพ์รายงาน ==================== -->
+  <section id="view-history" class="max-w-4xl mx-auto px-4 pt-4 hidden no-print">
+    <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/80 mb-4 flex flex-wrap gap-3 items-end justify-between">
+      <div class="flex flex-wrap gap-3 flex-1">
+        <div>
+          <label class="block text-xs font-medium text-slate-500 mb-1">ค้นหาตามวันที่</label>
+          <input type="date" id="filter-date" onchange="renderHistory()" class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-500 mb-1">กรองตาม Supplier</label>
+          <select id="filter-supplier" onchange="renderHistory()" class="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm">
+            <option value="ALL">ทุกบริษัท (All Suppliers)</option>
+          </select>
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="resetHistoryFilter()" class="px-3 py-2 text-xs bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200">ดูทั้งหมด</button>
+        <button onclick="fetchHistory(true)" class="px-3 py-2 text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl font-medium hover:bg-emerald-100 flex items-center gap-1">
+          <span id="sync-icon">↻</span> อัปเดตข้อมูล
+        </button>
+      </div>
+    </div>
+
+    <div id="history-list" class="space-y-3"></div>
+  </section>
+
+  <!-- ==================== พื้นที่สำหรับพิมพ์รายงาน A4 (แสดงเฉพาะตอนสั่ง Print) ==================== -->
+  <div id="print-area" class="print-only"></div>
+
+  <script>
+    // =========================================================================
+    // 1. วาง URL ของ Google Apps Script Web App ที่นี่
+    // =========================================================================
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbzbdX3etG-ca8UZlP0dTOELFkxLgAszmjzODHgsP6r-oJ0LvH91zcm9LfdWAyQSQZag/exec';
+
+    // =========================================================================
+    // 2. ฐานข้อมูลวัตถุดิบบาร์ทั้งหมด 52 รายการ
+    // =========================================================================
+    const RAW_MATERIALS = [
+      // บจก.คอฟฟี่เวิร์คส์
+      { code: '20000422', name: 'คอฟฟี่เวิร์คส์ มัชฉะ กรีนที 5kg', supplier: 'บจก.คอฟฟี่เวิร์คส์', moq: 1, price: 1500.00, unit: 'ถุง' },
+      { code: '20000425', name: 'จิฟฟาด วนิลลา ไซรัป 1lt', supplier: 'บจก.คอฟฟี่เวิร์คส์', moq: 1, price: 404.10, unit: 'ขวด' },
+      { code: '20000426', name: 'จิฟฟาด คาราเมล ไซรัป 1lt', supplier: 'บจก.คอฟฟี่เวิร์คส์', moq: 1, price: 404.10, unit: 'ขวด' },
+      { code: '20000427', name: 'จิฟฟาด ฮาเซลนัท ไซรัป 1lt', supplier: 'บจก.คอฟฟี่เวิร์คส์', moq: 1, price: 404.10, unit: 'ขวด' },
+      { code: '20000428', name: 'จิฟฟาด คาราเมล ซอส 2lt', supplier: 'บจก.คอฟฟี่เวิร์คส์', moq: 1, price: 764.10, unit: 'ขวด' },
+      { code: '20000430', name: 'จิฟฟาด ดาร์ก ช็อคโกแลต 2lt', supplier: 'บจก.คอฟฟี่เวิร์คส์', moq: 1, price: 719.10, unit: 'ขวด' },
+      { code: '20000688', name: 'คอฟฟี่เวิร์คส์ คาเฟ่ซาโบรโซ่ 5kg', supplier: 'บจก.คอฟฟี่เวิร์คส์', moq: 1, price: 3250.00, unit: 'ลัง' },
+      { code: '20000099', name: 'คาเฟโต เอ็ม เอฟ ซี กรีน 1lt', supplier: 'บจก.คอฟฟี่เวิร์คส์', moq: 1, price: 1195.00, unit: 'ขวด' },
+      { code: '20000100', name: 'คาเฟโต เอฟยี่สิบ 200pc', supplier: 'บจก.คอฟฟี่เวิร์คส์', moq: 1, price: 2200.00, unit: 'กระปุก' },
+
+      // บจก.เซ็นทรัล ฟู้ด รีเทล (TOPS)
+      { code: '8850124018205', name: 'คาร์เนชั่นนมข้นจืด 405g TOPS', supplier: 'บจก.เซ็นทรัล ฟู้ด รีเทล', moq: 1, price: 25.37, unit: 'ขวด' },
+      { code: '8851012011315', name: 'คาร์เนชั่นครีมเทียมข้นหวาน 388g TOPS', supplier: 'บจก.เซ็นทรัล ฟู้ด รีเทล', moq: 1, price: 23.80, unit: 'ขวด' },
+      { code: '8850256000703', name: 'มิตรผลน้ำเชื่อม 800 ml TOPS', supplier: 'บจก.เซ็นทรัล ฟู้ด รีเทล', moq: 3, price: 41.31, unit: 'ถุง' },
+
+      // บจก.ไดเซโค(ประเทศไทย)
+      { code: '20000409', name: 'ไร่ทิพย์น้ำตาลทรายและพริกขี้หนูสวนป่น 13g 50pcs(pack)', supplier: 'บจก.ไดเซโค(ประเทศไทย)', moq: 1, price: 45.00, unit: 'แพ็ค' },
+      { code: '20000084', name: 'ปลาไส้ตันน้ำปลาพริกซอง 7g 50pcs(pack)', supplier: 'บจก.ไดเซโค(ประเทศไทย)', moq: 1, price: 45.00, unit: 'แพ็ค' },
+      { code: '20000410', name: 'ARO พริกน้ำส้ม 7g 50pcs(pack)', supplier: 'บจก.ไดเซโค(ประเทศไทย)', moq: 1, price: 43.00, unit: 'แพ็ค' },
+      { code: '20000083', name: 'โรซ่าซอสพริกซอง 10g 100pcs(cnt)', supplier: 'บจก.ไดเซโค(ประเทศไทย)', moq: 1, price: 110.00, unit: 'ลัง' },
+      { code: '20000082', name: 'โรซ่าซอสมะเขือเทศซอง 10g 100pcs(cnt)', supplier: 'บจก.ไดเซโค(ประเทศไทย)', moq: 1, price: 110.00, unit: 'ลัง' },
+      { code: '20000628', name: 'ส้มสไลด์เชื่อมอบแห้ง 1000g', supplier: 'บจก.ไดเซโค(ประเทศไทย)', moq: 5, price: 345.00, unit: 'ถุง' },
+      { code: '20000800', name: 'เลม่อนสด 1kg.', supplier: 'บจก.ไดเซโค(ประเทศไทย)', moq: 3, price: 105.00, unit: 'กิโลกรัม' },
+      { code: '8850370721119', name: 'ชาผงปรุงสำเร็จ ชาตรามือ 400 กรัม', supplier: 'บจก.ไดเซโค(ประเทศไทย)', moq: 12, price: 98.00, unit: 'ถุง' },
+      { code: '8850690001014', name: 'น้ำผึ้งเวชพงษ์ 1070g', supplier: 'บจก.ไดเซโค(ประเทศไทย)', moq: 1, price: 350.00, unit: 'ขวด' },
+      { code: '8857125463065', name: 'ทรอปิก้า คิง มะพร้าวน้ำหอมพร้อมปั่น 185g', supplier: 'บจก.ไดเซโค(ประเทศไทย)', moq: 50, price: 33.40, unit: 'ถุง' },
+      { code: '20000984', name: 'ผงนมถั่วเหลือง 500 g', supplier: 'บจก.ไดเซโค(ประเทศไทย)', moq: 3, price: 240.00, unit: 'ถุง' },
+      { code: '20001065', name: 'ผงมะนาวตราคะนอร์ 400g', supplier: 'บจก.ไดเซโค(ประเทศไทย)', moq: 1, price: 114.00, unit: 'ถุง' },
+      { code: '20001086', name: 'เอ็กซ์ตราบรูธ ผงโกโก้ 1000g', supplier: 'บจก.ไดเซโค(ประเทศไทย)', moq: 1, price: 1225.00, unit: 'ถุง' },
+      { code: '20001037', name: 'ซอสเฮยถางนำเข้า 1000g x12', supplier: 'บจก.ไดเซโค(ประเทศไทย)', moq: 1, price: 230.00, unit: 'ขวด' },
+
+      // บจก.มิกซ์เซี่ยน ฟู้ดส์
+      { code: '20000432', name: 'ชาเอิร์ลเกรย์ 100 g x50', supplier: 'บจก.มิกซ์เซี่ยน ฟู้ดส์', moq: 50, price: 56.00, unit: 'ถุง' },
+      { code: '20000435', name: 'ผงครีม 1000 g x12', supplier: 'บจก.มิกซ์เซี่ยน ฟู้ดส์', moq: 12, price: 215.00, unit: 'ถุง' },
+      { code: '20001267', name: 'โอเอมบี น้ำผลไม้เข้มข้นพีช 1000ml (NEW)', supplier: 'บจก.มิกซ์เซี่ยน ฟู้ดส์', moq: 1, price: 280.00, unit: 'ขวด' },
+      { code: '20001268', name: 'โอเอมบี น้ำผลไม้เข้มข้นสตรอว์เบอร์รี่ 1000ml (NEW)', supplier: 'บจก.มิกซ์เซี่ยน ฟู้ดส์', moq: 1, price: 280.00, unit: 'ขวด' },
+      { code: '20001269', name: 'โอเอมบี น้ำผลไม้เข้มข้นเสาวรส 1000ml (NEW)', supplier: 'บจก.มิกซ์เซี่ยน ฟู้ดส์', moq: 1, price: 280.00, unit: 'ขวด' },
+      { code: '20000445', name: 'ผงพุดดิ้งนม 1000 g', supplier: 'บจก.มิกซ์เซี่ยน ฟู้ดส์', moq: 1, price: 400.00, unit: 'ถุง' },
+      { code: '20000452', name: 'ชาเขียวมะลิ 500 g x16', supplier: 'บจก.มิกซ์เซี่ยน ฟู้ดส์', moq: 16, price: 320.00, unit: 'ถุง' },
+      { code: '20000624', name: 'น้ำผลไม้เข้มข้นส้ม 5000g', supplier: 'บจก.มิกซ์เซี่ยน ฟู้ดส์', moq: 1, price: 700.00, unit: 'แกลลอน' },
+      { code: '20000927', name: 'คอนยัคกุ 1000 g x12', supplier: 'บจก.มิกซ์เซี่ยน ฟู้ดส์', moq: 12, price: 145.00, unit: 'ถุง' },
+      { code: '20000929', name: 'เจลลี่บราวน์ชูการ์ 1200 g x6', supplier: 'บจก.มิกซ์เซี่ยน ฟู้ดส์', moq: 6, price: 285.00, unit: 'ถุง' },
+      { code: '20000467', name: 'กระดาษกรองชา 500 pcs', supplier: 'บจก.มิกซ์เซี่ยน ฟู้ดส์', moq: 1, price: 1700.00, unit: 'ลัง' },
+      { code: '20000434', name: 'น้ำเชื่อม 5000 g x3', supplier: 'บจก.มิกซ์เซี่ยน ฟู้ดส์', moq: 3, price: 400.00, unit: 'ถุง' },
+      { code: '20000443', name: 'ไข่มุกดำ 1000 g x18', supplier: 'บจก.มิกซ์เซี่ยน ฟู้ดส์', moq: 18, price: 45.00, unit: 'ถุง' },
+      { code: '20000444', name: 'ผงเฉาก๊วย 1000 g', supplier: 'บจก.มิกซ์เซี่ยน ฟู้ดส์', moq: 1, price: 600.00, unit: 'ถุง' },
+
+      // บจก.สุนทรฟิล์ม
+      { code: '20000989', name: 'สติกเกอร์เครื่องดื่มน้ำผลไม้ น้ำส้ม แบบใส 240ml', supplier: 'บจก.สุนทรฟิล์ม', moq: 1000, price: 0.80, unit: 'ดวง' },
+      { code: '20000870', name: 'สติกเกอร์เครื่องดื่มขวด อเมริกาโน่เย็น แบบใส 220ml', supplier: 'บจก.สุนทรฟิล์ม', moq: 1000, price: 0.95, unit: 'ดวง' },
+      { code: '20000871', name: 'สติกเกอร์เครื่องดื่มขวด ลาเต้เย็น แบบใส 220ml', supplier: 'บจก.สุนทรฟิล์ม', moq: 1000, price: 0.95, unit: 'ดวง' },
+      { code: '20000872', name: 'สติกเกอร์เครื่องดื่มขวด เอสเปรสโซ่เย็น แบบใส 220ml', supplier: 'บจก.สุนทรฟิล์ม', moq: 1000, price: 0.95, unit: 'ดวง' },
+      { code: '20000873', name: 'สติกเกอร์เครื่องดื่มขวด ชานมเอิร์ลเกรย์ แบบใส 220ml', supplier: 'บจก.สุนทรฟิล์ม', moq: 1000, price: 0.95, unit: 'ดวง' },
+      { code: '20000874', name: 'สติกเกอร์เครื่องดื่มขวด ชาไทย แบบใส 220ml', supplier: 'บจก.สุนทรฟิล์ม', moq: 1000, price: 0.95, unit: 'ดวง' },
+      { code: '20000875', name: 'สติกเกอร์เครื่องดื่มขวด นมสดสตรอว์เบอร์รี่ แบบใส 220ml', supplier: 'บจก.สุนทรฟิล์ม', moq: 1000, price: 0.95, unit: 'ดวง' },
+      { code: '20000879', name: 'สติกเกอร์เครื่องดื่มขวด ชามะนาว แบบใส 220ml', supplier: 'บจก.สุนทรฟิล์ม', moq: 1000, price: 0.95, unit: 'ดวง' },
+      { code: '20001066', name: 'สติกเกอร์เครื่องดื่มขวด ดาร์กโกโก้ แบบใส 220ml', supplier: 'บจก.สุนทรฟิล์ม', moq: 1000, price: 0.95, unit: 'ดวง' },
+      { code: '20001184', name: 'สติกเกอร์เครื่องดื่มขวด มัชฉะลาเต้ แบบใส 220ml', supplier: 'บจก.สุนทรฟิล์ม', moq: 1000, price: 0.95, unit: 'ดวง' },
+      { code: '20001185', name: 'สติกเกอร์เครื่องดื่มขวด น้ำผึ้งมะนาว แบบใส 220ml', supplier: 'บจก.สุนทรฟิล์ม', moq: 1000, price: 0.95, unit: 'ดวง' }
+    ];
+
+    // State Management
+    let cart = JSON.parse(localStorage.getItem('bar_order_cart') || '{}');
+    let historyCache = JSON.parse(localStorage.getItem('bar_order_history') || '[]');
+    let selectedSupplier = 'ALL';
+
+    // Initialization
+    document.addEventListener('DOMContentLoaded', () => {
+      // ตั้งวันที่ปัจจุบัน
+      const today = new Date().toLocaleDateString('en-CA');
+      document.getElementById('order-date').value = today;
+      document.getElementById('order-by').value = localStorage.getItem('bar_order_staff') || '';
+
+      initSuppliers();
+      renderProducts();
+      updateBottomBar();
+      
+      // โหลดประวัติจาก Cache ทันที แล้วค่อย Sync เบื้องหลัง
+      renderHistory();
+      fetchHistory(false);
+    });
+
+    // สร้างแท็บ Supplier
+    function initSuppliers() {
+      const suppliers = ['ALL', ...new Set(RAW_MATERIALS.map(item => item.supplier))];
+      const tabContainer = document.getElementById('supplier-tabs');
+      const filterSelect = document.getElementById('filter-supplier');
+
+      tabContainer.innerHTML = suppliers.map(sup => {
+        const label = sup === 'ALL' ? 'ทั้งหมด (52)' : sup.replace('บจก.', '');
+        return `<button onclick="selectSupplier('${sup}')" data-sup="${sup}" class="sup-btn whitespace-nowrap px-3.5 py-1.5 rounded-full text-xs font-medium border transition ${sup === 'ALL' ? 'bg-emerald-700 text-white border-emerald-700 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}">${label}</button>`;
+      }).join('');
+
+      suppliers.filter(s => s !== 'ALL').forEach(sup => {
+        const opt = document.createElement('option');
+        opt.value = sup;
+        opt.textContent = sup;
+        filterSelect.appendChild(opt);
+      });
+    }
+
+    function selectSupplier(sup) {
+      selectedSupplier = sup;
+      document.querySelectorAll('.sup-btn').forEach(btn => {
+        if (btn.dataset.sup === sup) {
+          btn.className = 'sup-btn whitespace-nowrap px-3.5 py-1.5 rounded-full text-xs font-medium border transition bg-emerald-700 text-white border-emerald-700 shadow-sm';
+        } else {
+          btn.className = 'sup-btn whitespace-nowrap px-3.5 py-1.5 rounded-full text-xs font-medium border transition bg-white text-slate-600 border-slate-200 hover:bg-slate-50';
+        }
+      });
+      renderProducts();
+    }
+
+    function clearSearch() {
+      document.getElementById('search-input').value = '';
+      renderProducts();
+    }
+
+    // แสดงรายการสินค้า
+    function renderProducts() {
+      const query = document.getElementById('search-input').value.trim().toLowerCase();
+      document.getElementById('clear-search-btn').classList.toggle('hidden', !query);
+
+      const filtered = RAW_MATERIALS.filter(item => {
+        const matchSup = selectedSupplier === 'ALL' || item.supplier === selectedSupplier;
+        const matchQuery = !query || item.name.toLowerCase().includes(query) || item.code.includes(query);
+        return matchSup && matchQuery;
+      });
+
+      const container = document.getElementById('product-list');
+      if (filtered.length === 0) {
+        container.innerHTML = `<div class="text-center py-12 text-slate-400 text-sm">ไม่พบรายการวัตถุดิบที่ค้นหา</div>`;
+        return;
+      }
+
+      container.innerHTML = filtered.map(item => {
+        const qty = cart[item.code] || 0;
+        const isSelected = qty > 0;
+        return `
+          <div class="bg-white p-3.5 rounded-2xl border transition ${isSelected ? 'border-emerald-500 ring-1 ring-emerald-500/30 bg-emerald-50/10' : 'border-slate-200/80'} flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-[11px] font-mono bg-slate-100 text-slate-600 px-2 py-0.5 rounded">${item.code}</span>
+                <span class="text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-medium">${item.supplier}</span>
+              </div>
+              <h3 class="font-semibold text-slate-800 text-sm mt-1 leading-snug">${item.name}</h3>
+              <div class="text-xs text-slate-500 mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                <span>ราคา: <strong class="text-slate-700">฿${item.price.toLocaleString('en-US', {minimumFractionDigits: 2})}</strong> / ${item.unit}</span>
+                <span class="${item.moq > 1 ? 'text-amber-600 font-medium' : ''}">ขั้นต่ำ: ${item.moq} ${item.unit}</span>
+              </div>
+            </div>
+
+            <!-- ปุ่มเพิ่ม/ลดจำนวน (ปัดตามขั้นต่ำ MOQ อัตโนมัติ) -->
+            <div class="flex items-center justify-between sm:justify-end gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+              ${isSelected ? `<span class="text-xs font-bold text-emerald-700 sm:mr-2">฿${(qty * item.price).toLocaleString('en-US', {minimumFractionDigits: 2})}</span>` : '<span></span>'}
+              <div class="flex items-center bg-slate-100 rounded-xl p-1">
+                <button onclick="updateQty('${item.code}', -1)" class="w-8 h-8 rounded-lg bg-white text-slate-700 font-bold shadow-sm active:scale-90 flex items-center justify-center">-</button>
+                <input type="number" value="${qty}" onchange="setDirectQty('${item.code}', this.value)" class="w-14 text-center bg-transparent font-semibold text-sm text-slate-800 focus:outline-none">
+                <button onclick="updateQty('${item.code}', 1)" class="w-8 h-8 rounded-lg bg-emerald-600 text-white font-bold shadow-sm active:scale-90 flex items-center justify-center">+</button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // ปรับจำนวนทีละขั้นต่ำ (MOQ)
+    function updateQty(code, delta) {
+      const item = RAW_MATERIALS.find(i => i.code === code);
+      if (!item) return;
+      const current = cart[code] || 0;
+      const step = item.moq;
+      let next = current + (delta * step);
+      
+      if (next <= 0) {
+        delete cart[code];
+      } else {
+        cart[code] = next;
+      }
+      saveCart();
+    }
+
+    // กรอกตัวเลขตรงๆ
+    function setDirectQty(code, val) {
+      const item = RAW_MATERIALS.find(i => i.code === code);
+      let num = parseInt(val, 10);
+      if (isNaN(num) || num <= 0) {
+        delete cart[code];
+      } else {
+        // แจ้งเตือนถ้าสั่งต่ำกว่าขั้นต่ำ
+        if (num < item.moq) {
+          alert(`รายการ "${item.name}" สั่งซื้อขั้นต่ำ ${item.moq} ${item.unit} ระบบปรับเป็น ${item.moq} ให้อัตโนมัติ`);
+          num = item.moq;
+        }
+        cart[code] = num;
+      }
+      saveCart();
+    }
+
+    function saveCart() {
+      localStorage.setItem('bar_order_cart', JSON.stringify(cart));
+      renderProducts();
+      updateBottomBar();
+    }
+
+    function updateBottomBar() {
+      const codes = Object.keys(cart);
+      let total = 0;
+      codes.forEach(c => {
+        const item = RAW_MATERIALS.find(i => i.code === c);
+        if (item) total += item.price * cart[c];
+      });
+
+      document.getElementById('cart-count').textContent = `${codes.length} รายการ`;
+      document.getElementById('cart-total').textContent = total.toLocaleString('en-US', {minimumFractionDigits: 2});
+      document.getElementById('modal-total').textContent = total.toLocaleString('en-US', {minimumFractionDigits: 2});
+      document.getElementById('review-btn').disabled = codes.length === 0;
+    }
+
+    // เปิดหน้าต่างตรวจสอบรายการ (จัดกลุ่มตาม Supplier)
+    function openCartModal() {
+      const codes = Object.keys(cart);
+      if (codes.length === 0) return;
+
+      const grouped = {};
+      codes.forEach(code => {
+        const item = RAW_MATERIALS.find(i => i.code === code);
+        if (!item) return;
+        if (!grouped[item.supplier]) grouped[item.supplier] = [];
+        grouped[item.supplier].push({ ...item, qty: cart[code] });
+      });
+
+      const container = document.getElementById('cart-items-container');
+      container.innerHTML = Object.keys(grouped).map(sup => {
+        const subTotal = grouped[sup].reduce((sum, i) => sum + (i.price * i.qty), 0);
+        return `
+          <div class="border border-slate-200 rounded-xl overflow-hidden">
+            <div class="bg-slate-100 px-3.5 py-2 flex justify-between items-center">
+              <span class="font-bold text-xs text-slate-700">${sup}</span>
+              <span class="text-xs font-semibold text-emerald-700">รวม ฿${subTotal.toLocaleString('en-US', {minimumFractionDigits: 2})}</span>
+            </div>
+            <div class="divide-y divide-slate-100">
+              ${grouped[sup].map(i => `
+                <div class="px-3.5 py-2.5 flex justify-between items-center text-sm">
+                  <div class="pr-2">
+                    <div class="font-medium text-slate-800 text-xs">${i.name}</div>
+                    <div class="text-[11px] text-slate-400">รหัส: ${i.code} • ฿${i.price.toFixed(2)}/${i.unit}</div>
+                  </div>
+                  <div class="text-right whitespace-nowrap">
+                    <div class="font-bold text-slate-800">${i.qty} ${i.unit}</div>
+                    <div class="text-xs text-emerald-600">฿${(i.qty * i.price).toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      document.getElementById('cart-modal').classList.remove('hidden');
+    }
+
+    function closeCartModal() {
+      document.getElementById('cart-modal').classList.add('hidden');
+    }
+
+    function clearCart() {
+      if (confirm('ต้องการล้างรายการที่เลือกทั้งหมดใช่หรือไม่?')) {
+        cart = {};
+        saveCart();
+        closeCartModal();
+      }
+    }
+
+    // บันทึกข้อมูลส่งไปยัง Google Sheet
+    async function submitOrder() {
+      const date = document.getElementById('order-date').value;
+      const orderBy = document.getElementById('order-by').value.trim();
+      const note = document.getElementById('order-note').value.trim();
+
+      if (!date) return alert('กรุณาระบุวันที่สั่งของ');
+      if (!orderBy) return alert('กรุณาระบุชื่อผู้ทำรายการ');
+
+      localStorage.setItem('bar_order_staff', orderBy);
+
+      const items = Object.keys(cart).map(code => {
+        const item = RAW_MATERIALS.find(i => i.code === code);
+        return { ...item, qty: cart[code] };
+      });
+
+      const orderId = 'ORD-' + Date.now().toString().slice(-6);
+      const payload = { orderId, date, orderBy, note, items };
+
+      const btn = document.getElementById('submit-btn');
+      btn.disabled = true;
+      btn.textContent = 'กำลังบันทึก...';
+
+      try {
+        if (GAS_URL.includes('XXXXXXXX')) {
+          alert('คุณยังไม่ได้ใส่ URL ของ Google Apps Script (GAS_URL) ในโค้ด ระบบจะจำลองการบันทึกในเครื่องชั่วคราว');
+        } else {
+          await fetch(GAS_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        }
+
+        // อัปเดต Cache ประวัติทันทีเพื่อให้เห็นผลไว
+        items.forEach(i => {
+          historyCache.unshift({
+            orderId, date, orderBy, supplier: i.supplier, code: i.code,
+            name: i.name, qty: i.qty, unit: i.unit, unitPrice: i.price,
+            totalPrice: i.qty * i.price, note
+          });
+        });
+        localStorage.setItem('bar_order_history', JSON.stringify(historyCache));
+
+        cart = {};
+        saveCart();
+        closeCartModal();
+        alert(`บันทึกใบสั่งของเลขที่ ${orderId} เรียบร้อยแล้ว!`);
+        switchTab('history');
+        setTimeout(() => fetchHistory(false), 1500);
+
+      } catch (err) {
+        alert('เกิดข้อผิดพลาดในการเชื่อมต่อ: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'บันทึกข้อมูลลง Sheet';
+      }
+    }
+
+    // สลับแท็บหน้าจอ
+    function switchTab(tab) {
+      const isOrder = tab === 'order';
+      document.getElementById('view-order').classList.toggle('hidden', !isOrder);
+      document.getElementById('bottom-bar').classList.toggle('hidden', !isOrder);
+      document.getElementById('view-history').classList.toggle('hidden', isOrder);
+
+      document.getElementById('tab-order').className = isOrder 
+        ? 'px-3 py-1.5 rounded-lg font-medium bg-white text-emerald-800 shadow-sm transition'
+        : 'px-3 py-1.5 rounded-lg font-medium text-emerald-100 hover:text-white transition';
+      document.getElementById('tab-history').className = !isOrder 
+        ? 'px-3 py-1.5 rounded-lg font-medium bg-white text-emerald-800 shadow-sm transition'
+        : 'px-3 py-1.5 rounded-lg font-medium text-emerald-100 hover:text-white transition';
+
+      if (!isOrder) renderHistory();
+    }
+
+    // ดึงข้อมูลประวัติจาก Google Sheet
+    async function fetchHistory(showAlert = false) {
+      if (GAS_URL.includes('XXXXXXXX')) return;
+      const icon = document.getElementById('sync-icon');
+      if (icon) icon.classList.add('animate-spin');
+
+      try {
+        const res = await fetch(GAS_URL);
+        const json = await res.json();
+        if (json.status === 'success') {
+          historyCache = json.data;
+          localStorage.setItem('bar_order_history', JSON.stringify(historyCache));
+          renderHistory();
+          if (showAlert) alert('อัปเดตข้อมูลล่าสุดจาก Google Sheet เรียบร้อยแล้ว');
+        }
+      } catch (err) {
+        console.error('Sync error:', err);
+      } finally {
+        if (icon) icon.classList.remove('animate-spin');
+      }
+    }
+
+    function resetHistoryFilter() {
+      document.getElementById('filter-date').value = '';
+      document.getElementById('filter-supplier').value = 'ALL';
+      renderHistory();
+    }
+
+    // แสดงรายการย้อนหลัง (จัดกลุ่มตามใบสั่งซื้อ Order ID)
+    function renderHistory() {
+      const fDate = document.getElementById('filter-date').value;
+      const fSup = document.getElementById('filter-supplier').value;
+
+      const filtered = historyCache.filter(row => {
+        const rowDate = String(row.date).slice(0, 10);
+        const matchDate = !fDate || rowDate === fDate;
+        const matchSup = fSup === 'ALL' || row.supplier === fSup;
+        return matchDate && matchSup;
+      });
+
+      const container = document.getElementById('history-list');
+      if (filtered.length === 0) {
+        container.innerHTML = `<div class="bg-white rounded-2xl p-10 text-center text-slate-400 text-sm border border-slate-200/80">ยังไม่มีประวัติการสั่งซื้อในเงื่อนไขที่เลือก</div>`;
+        return;
+      }
+
+      // จัดกลุ่มตาม orderId
+      const ordersMap = {};
+      filtered.forEach(row => {
+        if (!ordersMap[row.orderId]) {
+          ordersMap[row.orderId] = {
+            orderId: row.orderId,
+            date: String(row.date).slice(0, 10),
+            orderBy: row.orderBy,
+            note: row.note,
+            items: []
+          };
+        }
+        ordersMap[row.orderId].items.push(row);
+      });
+
+      container.innerHTML = Object.values(ordersMap).map(order => {
+        const totalAmount = order.items.reduce((s, i) => s + Number(i.totalPrice), 0);
+        return `
+          <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
+            <div class="p-4 bg-slate-50 border-b border-slate-100 flex flex-wrap justify-between items-center gap-2">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="font-bold text-emerald-800 text-sm">${order.orderId}</span>
+                  <span class="text-xs bg-white border border-slate-200 px-2 py-0.5 rounded-md text-slate-600">วันที่: ${order.date}</span>
+                </div>
+                <div class="text-xs text-slate-500 mt-1">ผู้สั่ง: <strong>${order.orderBy}</strong> ${order.note ? `• หมายเหตุ: ${order.note}` : ''}</div>
+              </div>
+              <div class="flex items-center gap-2">
+                <div class="text-right mr-2">
+                  <div class="text-[11px] text-slate-400">ยอดรวม (${order.items.length} รายการ)</div>
+                  <div class="font-bold text-slate-800">฿${totalAmount.toLocaleString('en-US', {minimumFractionDigits: 2})}</div>
+                </div>
+                <button onclick="printReport('${order.orderId}')" class="bg-slate-800 hover:bg-slate-900 text-white text-xs font-medium px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-sm transition">
+                  🖨️ พิมพ์รายงาน A4
+                </button>
+              </div>
+            </div>
+            <div class="p-3 divide-y divide-slate-100 max-h-60 overflow-y-auto">
+              ${order.items.map(i => `
+                <div class="py-2 flex justify-between items-center text-xs">
+                  <div>
+                    <span class="font-mono text-slate-400 mr-1">[${i.code}]</span>
+                    <span class="font-medium text-slate-700">${i.name}</span>
+                    <span class="text-slate-400 block sm:inline sm:ml-2">(${i.supplier})</span>
+                  </div>
+                  <div class="font-semibold text-slate-800 whitespace-nowrap ml-2">
+                    ${i.qty} ${i.unit} <span class="text-slate-400 font-normal">(฿${Number(i.totalPrice).toLocaleString('en-US', {minimumFractionDigits: 2})})</span>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // สร้างหน้าพิมพ์รายงาน A4 ส่งผู้จัดการ
+    function printReport(orderId) {
+      const fSup = document.getElementById('filter-supplier').value;
+      const items = historyCache.filter(r => r.orderId === orderId && (fSup === 'ALL' || r.supplier === fSup));
+      if (items.length === 0) return;
+
+      const info = items[0];
+      const grandTotal = items.reduce((sum, i) => sum + Number(i.totalPrice), 0);
+
+      // จัดกลุ่มตาม Supplier เพื่อความชัดเจนในรายงาน
+      const grouped = {};
+      items.forEach(i => {
+        if (!grouped[i.supplier]) grouped[i.supplier] = [];
+        grouped[i.supplier].push(i);
+      });
+
+      let tablesHtml = '';
+      Object.keys(grouped).forEach(sup => {
+        const subTotal = grouped[sup].reduce((s, i) => s + Number(i.totalPrice), 0);
+        tablesHtml += `
+          <div style="margin-top: 14px;">
+            <div style="font-weight: bold; font-size: 13px; margin-bottom: 4px; color: #065f46;">Supplier: ${sup}</div>
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 14%; text-align: center;">รหัสสินค้า</th>
+                  <th style="width: 44%; text-align: left;">รายการวัตถุดิบ</th>
+                  <th style="width: 12%; text-align: center;">จำนวนสั่ง</th>
+                  <th style="width: 10%; text-align: center;">หน่วย</th>
+                  <th style="width: 10%; text-align: right;">ราคา/หน่วย</th>
+                  <th style="width: 10%; text-align: right;">รวมเงิน (บาท)</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${grouped[sup].map(item => `
+                  <tr>
+                    <td style="text-align: center; font-family: monospace;">${item.code}</td>
+                    <td>${item.name}</td>
+                    <td style="text-align: center; font-weight: bold;">${item.qty}</td>
+                    <td style="text-align: center;">${item.unit}</td>
+                    <td style="text-align: right;">${Number(item.unitPrice).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                    <td style="text-align: right;">${Number(item.totalPrice).toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                  </tr>
+                `).join('')}
+                <tr>
+                  <td colspan="5" style="text-align: right; font-weight: bold; background: #f8fafc;">รวมยอด ${sup}</td>
+                  <td style="text-align: right; font-weight: bold; background: #f8fafc;">${subTotal.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        `;
+      });
+
+      document.getElementById('print-area').innerHTML = `
+        <div style="border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-end;">
+          <div>
+            <h1 style="font-size: 18px; font-weight: bold; margin: 0;">ใบสรุปรายการสั่งซื้อวัตถุดิบบาร์ (Bar Order Report)</h1>
+            <p style="font-size: 14px; font-weight: bold; margin: 2px 0 0 0;">สาขา สนามกีฬาแห่งชาติ</p>
+          </div>
+          <div style="text-align: right; font-size: 12px;">
+            <div><strong>เลขที่เอกสาร:</strong> ${info.orderId}</div>
+            <div><strong>วันที่สั่งซื้อ:</strong> ${String(info.date).slice(0, 10)}</div>
+            <div><strong>ผู้ทำรายการ:</strong> ${info.orderBy}</div>
+          </div>
+        </div>
+
+        ${info.note ? `<div style="margin-bottom: 10px; font-size: 12px;"><strong>หมายเหตุ:</strong> ${info.note}</div>` : ''}
+
+        ${tablesHtml}
+
+        <div style="margin-top: 16px; text-align: right; font-size: 15px; font-weight: bold; border-top: 2px solid #000; padding-top: 8px;">
+          ยอดรวมสั่งซื้อสุทธิทั้งหมด (${items.length} รายการ): ฿${grandTotal.toLocaleString('en-US', {minimumFractionDigits: 2})}
+        </div>
+
+        <div style="margin-top: 40px; display: flex; justify-content: space-around; text-align: center; font-size: 12px;">
+          <div>
+            <div>......................................................</div>
+            <div style="margin-top: 4px;">(${info.orderBy})</div>
+            <div>ผู้จัดทำ / พนักงานบาร์</div>
+          </div>
+          <div>
+            <div>......................................................</div>
+            <div style="margin-top: 4px;">(......................................................)</div>
+            <div>ผู้จัดการสาขา / ผู้อนุมัติ</div>
+          </div>
+        </div>
+      `;
+
+      window.print();
+    }
+  </script>
+</body>
+</html>
